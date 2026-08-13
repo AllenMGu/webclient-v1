@@ -32,7 +32,7 @@ Future<Null> main() async {
       ? Brightness.dark
       : selectedTheme == 'light'
       ? Brightness.light
-      : WidgetsBinding.instance!.window.platformBrightness;
+      : WidgetsBinding.instance.window.platformBrightness;
   WebClientTheme.configure(brightness);
   refreshCurrentUser();
   toAndroidChannelInit();

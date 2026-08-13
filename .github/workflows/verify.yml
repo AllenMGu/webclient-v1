@@ -31,6 +31,7 @@ jobs:
           test -f integration/resources-web-js/yarn.lock
           test -f overrides/flutter/lib/webclient_theme.dart
           test -f overrides/flutter/lib/pages/connection_page.dart
+          test -f overrides/flutter/lib/pages/web_settings_page.dart
 
   build:
     name: Build twice and compare

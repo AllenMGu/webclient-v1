@@ -169,7 +169,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     translate(
                       'Connect to another device using its RustDesk ID.',
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: WebClientTheme.muted,
                       fontSize: 14,
                     ),
@@ -305,7 +305,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   children: [
                     Text(
                       translate('Control Remote Desktop'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: WebClientTheme.text,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -314,7 +314,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     const SizedBox(height: 3),
                     Text(
                       translate('Enter the ID shown on the remote device.'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: WebClientTheme.muted,
                         fontSize: 12,
                       ),
@@ -331,7 +331,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   autocorrect: false,
                   enableSuggestions: false,
                   keyboardType: TextInputType.visiblePassword,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: WebClientTheme.text,
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -342,7 +342,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   decoration: InputDecoration(
                     labelText: translate('Remote ID'),
                     hintText: '123 456 789',
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.tag_rounded,
                       size: 20,
                       color: WebClientTheme.muted,
@@ -571,7 +571,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         children: [
           Text(
             '${_selectedPeers.length} ${translate('selected')}',
-            style: const TextStyle(
+            style: TextStyle(
               color: WebClientTheme.text,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -756,7 +756,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           const SizedBox(height: 16),
           Text(
             translate('Tags'),
-            style: const TextStyle(
+            style: TextStyle(
               color: WebClientTheme.text,
               fontWeight: FontWeight.w600,
               fontSize: 13,
@@ -769,7 +769,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
               padding: const EdgeInsets.only(top: 7),
               child: Text(
                 translate('No tags'),
-                style: const TextStyle(
+                style: TextStyle(
                   color: WebClientTheme.muted,
                   fontSize: 12,
                 ),
@@ -856,7 +856,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       ),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             Icons.devices_other_outlined,
             color: WebClientTheme.muted,
             size: 29,
@@ -864,7 +864,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           const SizedBox(height: 10),
           Text(
             translate(data[0]),
-            style: const TextStyle(
+            style: TextStyle(
               color: WebClientTheme.text,
               fontWeight: FontWeight.w600,
             ),
@@ -873,7 +873,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           Text(
             translate(data[1]),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: WebClientTheme.muted, fontSize: 12),
+            style: TextStyle(color: WebClientTheme.muted, fontSize: 12),
           ),
         ],
       ),
@@ -971,7 +971,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                               peer.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: WebClientTheme.text,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -993,7 +993,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         peer.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: WebClientTheme.muted,
                           fontSize: 12,
                         ),
@@ -1065,7 +1065,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   Widget _peerMenu(_WebPeer peer) {
     return PopupMenuButton<String>(
       tooltip: translate('More'),
-      icon: const Icon(Icons.more_vert, color: WebClientTheme.muted, size: 20),
+      icon: Icon(Icons.more_vert, color: WebClientTheme.muted, size: 20),
       onSelected: (value) {
         if (value == 'connect') connect(peer.id);
         if (value == 'favorite') _setFavorite(peer.id, !peer.favorite);

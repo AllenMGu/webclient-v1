@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../common.dart';
+import '../models/model.dart';
 import '../webclient_theme.dart';
 import 'settings_page.dart';
 
@@ -15,8 +16,7 @@ class WebSettingsPage extends StatefulWidget {
 }
 
 class _WebSettingsPageState extends State<WebSettingsPage> {
-  static const _sourceUrl =
-      'https://github.com/AllenMGu/webclient-v1/tree/47a7b7313bb906ebdae36bd16838bdefa8853639';
+  static const _sourceUrl = 'https://github.com/AllenMGu/webclient-v1';
   _SettingsSection _section = _SettingsSection.general;
 
   late String _theme;
