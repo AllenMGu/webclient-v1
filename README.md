@@ -90,7 +90,7 @@ docker build --platform linux/amd64 \
 更新后从完整源码生成的 `main.dart.js` SHA-256 固定为：
 
 ```text
-d92ca6461822b1d0013c4af9024e994f56914e2b8303b6555a5f9041138e971c
+82dcac8f2d4c36327c9d56a0fef492f4e4db92d1960277318014e5b7f06fda85
 ```
 
 构建基础镜像、Flutter/Engine 提交、依赖锁文件和 `SOURCE_DATE_EPOCH` 均已固定；

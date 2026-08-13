@@ -65,7 +65,10 @@ RUN cp -a /work/upstream-source /work/build-source \
 RUN cd /work/build-source/flutter \
     && flutter pub get \
     && flutter build web --release --base-href /webclient/ \
-    && sha256sum build/web/main.dart.js
+    && printf '%s  %s\n' \
+      82dcac8f2d4c36327c9d56a0fef492f4e4db92d1960277318014e5b7f06fda85 \
+      build/web/main.dart.js \
+      | sha256sum --check --strict
 
 COPY postprocess.mjs /work/postprocess.mjs
 RUN node /work/postprocess.mjs \
