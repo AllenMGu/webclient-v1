@@ -11,10 +11,12 @@ import 'home_page.dart';
 import 'remote_page.dart';
 import 'settings_page.dart';
 import 'scan_page.dart';
+import 'web_settings_page.dart';
 
 enum _PeerSection { recent, favorites, addressBook, devices }
 
 class _WebPeer {
+  final Map<String, dynamic> raw;
   final String id;
   final String username;
   final String hostname;
@@ -26,10 +28,12 @@ class _WebPeer {
   final int lastConnected;
   final bool favorite;
   final bool addressBook;
+  final List<String> addressBooks;
   final bool managed;
 
   _WebPeer.fromJson(Map<String, dynamic> json)
-    : id = json['id'] ?? '',
+    : raw = Map<String, dynamic>.from(json),
+      id = json['id'] ?? '',
       username = json['username'] ?? '',
       hostname = json['hostname'] ?? '',
       platform = json['platform'] ?? '',
@@ -42,7 +46,26 @@ class _WebPeer {
       lastConnected = (json['last_connected'] as num? ?? 0).toInt(),
       favorite = json['favorite'] == true,
       addressBook = json['address_book'] == true,
+      addressBooks = (json['address_books'] as List<dynamic>? ?? [])
+          .map((book) => book.toString())
+          .toList(),
       managed = json['managed'] == true;
+
+  _WebPeer forAddressBook(String guid) {
+    final allDetails = raw['address_book_details'];
+    if (allDetails is! Map) return this;
+    final detail = allDetails[guid];
+    if (detail is! Map) return this;
+    return _WebPeer.fromJson({
+      ...raw,
+      'username': detail['username'] ?? username,
+      'hostname': detail['hostname'] ?? hostname,
+      'platform': detail['platform'] ?? platform,
+      'alias': detail['alias'] ?? alias,
+      'tags': detail['tags'] ?? <dynamic>[],
+      'hash': detail['hash'] ?? '',
+    });
+  }
 
   String get title => alias.isNotEmpty
       ? alias
@@ -73,6 +96,24 @@ class _WebPeer {
   }
 }
 
+class _WebAddressBook {
+  final String guid;
+  final String name;
+  final String owner;
+  final int rule;
+  final List<String> tags;
+
+  _WebAddressBook.fromJson(Map<String, dynamic> json)
+    : guid = json['guid'] ?? '',
+      name = json['name'] ?? '',
+      owner = json['owner'] ?? '',
+      rule = (json['rule'] as num? ?? 0).toInt(),
+      tags = (json['tags'] as List<dynamic>? ?? [])
+          .map((tag) => tag.toString())
+          .where((tag) => tag.isNotEmpty)
+          .toList();
+}
+
 class ConnectionPage extends StatefulWidget implements PageShape {
   ConnectionPage({Key? key}) : super(key: key);
 
@@ -97,6 +138,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
   bool _searchVisible = false;
   bool _selectionMode = false;
   bool _gridView = true;
+  String? _selectedAddressBook;
+  String? _selectedAddressBookTag;
   var _updateUrl = '';
 
   @override
@@ -144,7 +187,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     translate(
                       'Connect to another device using its RustDesk ID.',
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: WebClientTheme.muted,
                       fontSize: 14,
                     ),
@@ -280,7 +323,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   children: [
                     Text(
                       translate('Control Remote Desktop'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: WebClientTheme.text,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -289,7 +332,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     const SizedBox(height: 3),
                     Text(
                       translate('Enter the ID shown on the remote device.'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: WebClientTheme.muted,
                         fontSize: 12,
                       ),
@@ -306,7 +349,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   autocorrect: false,
                   enableSuggestions: false,
                   keyboardType: TextInputType.visiblePassword,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: WebClientTheme.text,
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -317,7 +360,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   decoration: InputDecoration(
                     labelText: translate('Remote ID'),
                     hintText: '123 456 789',
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.tag_rounded,
                       size: 20,
                       color: WebClientTheme.muted,
@@ -450,6 +493,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
         onTap: () => setState(() {
           _peerSection = section;
           _selectedPeers.clear();
+          if (section != _PeerSection.addressBook) {
+            _selectedAddressBookTag = null;
+          }
         }),
         child: Container(
           margin: const EdgeInsets.only(right: 4),
@@ -543,7 +589,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         children: [
           Text(
             '${_selectedPeers.length} ${translate('selected')}',
-            style: const TextStyle(
+            style: TextStyle(
               color: WebClientTheme.text,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -600,15 +646,48 @@ class _ConnectionPageState extends State<ConnectionPage> {
     }
   }
 
+  List<_WebAddressBook> _addressBookCatalog() {
+    if (isAndroid) return [];
+    try {
+      final value = FFI.getByName('address_book_catalog');
+      if (value.isEmpty) return [];
+      return (json.decode(value) as List<dynamic>)
+          .map((book) => _WebAddressBook.fromJson(book as Map<String, dynamic>))
+          .where((book) => book.guid.isNotEmpty)
+          .toList();
+    } catch (error) {
+      debugPrint('address_book_catalog: $error');
+      return [];
+    }
+  }
+
+  String? _effectiveAddressBook(List<_WebAddressBook> books) {
+    if (books.isEmpty) return null;
+    if (books.any((book) => book.guid == _selectedAddressBook)) {
+      return _selectedAddressBook;
+    }
+    return books.first.guid;
+  }
+
   List<_WebPeer> _visiblePeers() {
     final query = _peerSearchController.text;
-    return _peerCatalog().where((peer) {
+    final books = _addressBookCatalog();
+    final selectedBook = _effectiveAddressBook(books);
+    return _peerCatalog().map((peer) {
+      if (_peerSection == _PeerSection.addressBook && selectedBook != null) {
+        return peer.forAddressBook(selectedBook);
+      }
+      return peer;
+    }).where((peer) {
       final inSection = _peerSection == _PeerSection.recent
           ? peer.lastConnected > 0
           : _peerSection == _PeerSection.favorites
           ? peer.favorite
           : _peerSection == _PeerSection.addressBook
-          ? peer.addressBook
+          ? peer.addressBook &&
+                (selectedBook == null || peer.addressBooks.contains(selectedBook)) &&
+                (_selectedAddressBookTag == null ||
+                    peer.tags.contains(_selectedAddressBookTag))
           : peer.managed;
       return inSection && peer.matches(query);
     }).toList();
@@ -616,7 +695,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   Widget getPeers() {
     final peers = _visiblePeers();
+    if (_peerSection == _PeerSection.addressBook && !isAndroid) {
+      return _addressBookView(peers);
+    }
     if (peers.isEmpty && !isAndroid) return _emptyPeerState();
+    return _peerResults(peers);
+  }
+
+  Widget _peerResults(List<_WebPeer> peers) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (!_gridView) {
@@ -647,6 +733,128 @@ class _ConnectionPageState extends State<ConnectionPage> {
     );
   }
 
+  Widget _addressBookView(List<_WebPeer> peers) {
+    final books = _addressBookCatalog();
+    if (books.isEmpty) return _emptyPeerState();
+    final selectedGuid = _effectiveAddressBook(books);
+    final selected = books.firstWhere((book) => book.guid == selectedGuid);
+    final tags = selected.tags.toSet().toList()..sort();
+
+    final selector = Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: WebClientTheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: WebClientTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String>(
+            value: selectedGuid,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: translate('Address Book'),
+              prefixIcon: const Icon(Icons.contacts_outlined, size: 19),
+            ),
+            items: books
+                .map(
+                  (book) => DropdownMenuItem<String>(
+                    value: book.guid,
+                    child: Text(
+                      book.owner == book.name || book.owner.isEmpty
+                          ? book.name
+                          : '${book.name} · ${book.owner}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) => setState(() {
+              _selectedAddressBook = value;
+              _selectedAddressBookTag = null;
+              _selectedPeers.clear();
+            }),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            translate('Tags'),
+            style: TextStyle(
+              color: WebClientTheme.text,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _addressBookTag('All', null),
+          if (tags.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Text(
+                translate('No tags'),
+                style: TextStyle(
+                  color: WebClientTheme.muted,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ...tags.map((tag) => _addressBookTag(tag, tag)),
+        ],
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final results = peers.isEmpty ? _emptyPeerState() : _peerResults(peers);
+        if (constraints.maxWidth < 760) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [selector, const SizedBox(height: 12), results],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 220, child: selector),
+            const SizedBox(width: 14),
+            Expanded(child: results),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _addressBookTag(String label, String? tag) {
+    final selected = _selectedAddressBookTag == tag;
+    return InkWell(
+      borderRadius: BorderRadius.circular(7),
+      onTap: () => setState(() {
+        _selectedAddressBookTag = tag;
+        _selectedPeers.clear();
+      }),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? WebClientTheme.accent.withOpacity(0.09)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(
+          translate(label),
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: selected ? WebClientTheme.accent : WebClientTheme.muted,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _emptyPeerState() {
     final data = _peerSection == _PeerSection.recent
         ? ['No recent sessions', 'Devices you connect to will appear here.']
@@ -671,7 +879,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       ),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             Icons.devices_other_outlined,
             color: WebClientTheme.muted,
             size: 29,
@@ -679,7 +887,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           const SizedBox(height: 10),
           Text(
             translate(data[0]),
-            style: const TextStyle(
+            style: TextStyle(
               color: WebClientTheme.text,
               fontWeight: FontWeight.w600,
             ),
@@ -688,7 +896,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           Text(
             translate(data[1]),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: WebClientTheme.muted, fontSize: 12),
+            style: TextStyle(color: WebClientTheme.muted, fontSize: 12),
           ),
         ],
       ),
@@ -717,7 +925,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     : _selectedPeers.add(peer.id);
               });
             } else {
-              connect(peer.id);
+              _connectPeer(peer);
             }
           },
           child: Padding(
@@ -786,7 +994,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                               peer.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: WebClientTheme.text,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -808,7 +1016,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         peer.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: WebClientTheme.muted,
                           fontSize: 12,
                         ),
@@ -880,9 +1088,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
   Widget _peerMenu(_WebPeer peer) {
     return PopupMenuButton<String>(
       tooltip: translate('More'),
-      icon: const Icon(Icons.more_vert, color: WebClientTheme.muted, size: 20),
+      icon: Icon(Icons.more_vert, color: WebClientTheme.muted, size: 20),
       onSelected: (value) {
-        if (value == 'connect') connect(peer.id);
+        if (value == 'connect') _connectPeer(peer);
         if (value == 'favorite') _setFavorite(peer.id, !peer.favorite);
         if (value == 'remove_recent') _clearRecent([peer.id]);
         if (value == 'file') connect(peer.id, isFileTransfer: true);
@@ -914,6 +1122,20 @@ class _ConnectionPageState extends State<ConnectionPage> {
           ),
       ],
     );
+  }
+
+  void _connectPeer(_WebPeer peer) {
+    if (_peerSection == _PeerSection.addressBook) {
+      final books = _addressBookCatalog();
+      final selectedBook = _effectiveAddressBook(books);
+      if (selectedBook != null) {
+        FFI.setByName(
+          'address_book_activate',
+          json.encode({'id': peer.id, 'guid': selectedBook}),
+        );
+      }
+    }
+    connect(peer.id);
   }
 
   Widget _menuAction(IconData icon, String label) {
@@ -994,6 +1216,10 @@ class _WebMenuState extends State<WebMenu> {
                 : <PopupMenuItem<String>>[]) +
             [
               PopupMenuItem<String>(
+                child: _menuItem(Icons.settings_outlined, 'Settings'),
+                value: 'settings',
+              ),
+              PopupMenuItem<String>(
                 child: _menuItem(Icons.dns_outlined, 'ID/Relay Server'),
                 value: 'server',
               ),
@@ -1017,6 +1243,12 @@ class _WebMenuState extends State<WebMenu> {
             ];
       },
       onSelected: (value) {
+        if (value == 'settings') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => WebSettingsPage()),
+          );
+        }
         if (value == 'server') showServerSettings();
         if (value == 'about') showAbout();
         if (value == 'login') {

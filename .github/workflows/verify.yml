@@ -31,6 +31,7 @@ jobs:
           test -f integration/resources-web-js/yarn.lock
           test -f overrides/flutter/lib/webclient_theme.dart
           test -f overrides/flutter/lib/pages/connection_page.dart
+          test -f overrides/flutter/lib/pages/web_settings_page.dart
 
   build:
     name: Build twice and compare
@@ -67,7 +68,7 @@ jobs:
             --create --directory=/tmp/webclient-build-b .
           cmp /tmp/webclient-build-a.tar /tmp/webclient-build-b.tar
           printf '%s  %s\n' \
-            82dcac8f2d4c36327c9d56a0fef492f4e4db92d1960277318014e5b7f06fda85 \
+            fef91c15fa4b29d527878aea9f0a923b8b53a6aaaee4d99c61c926caddc74253 \
             /tmp/webclient-build-a/main.dart.js \
             | sha256sum --check --strict
           test -f /tmp/webclient-build-a/corresponding-source/LICENCE

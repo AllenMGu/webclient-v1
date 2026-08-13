@@ -87,7 +87,7 @@ class WebHomePage extends StatelessWidget {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(64),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: WebClientTheme.surface,
             border: Border(
               bottom: BorderSide(color: WebClientTheme.border),
@@ -114,7 +114,7 @@ class WebHomePage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 11),
-                    const Text(
+                    Text(
                       'RustDesk',
                       style: TextStyle(
                         color: WebClientTheme.text,
@@ -134,7 +134,7 @@ class WebHomePage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(5),
                         border: Border.all(color: WebClientTheme.border),
                       ),
-                      child: const Text(
+                      child: Text(
                         'WEB CLIENT V1',
                         style: TextStyle(
                           color: WebClientTheme.muted,
