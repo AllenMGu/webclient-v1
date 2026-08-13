@@ -27,7 +27,7 @@ fi
   --output "type=local,dest=${output_dir}" \
   "${script_dir}"
 
-expected=2112e6feed7220924ad1022b73d175d4d2c608cf9e07038bf4973e6a4c05838e
+expected=fef91c15fa4b29d527878aea9f0a923b8b53a6aaaee4d99c61c926caddc74253
 actual=$(sha256sum "${output_dir}/main.dart.js" | awk '{print $1}')
 if [ "${actual}" != "${expected}" ]; then
   echo "Unexpected main.dart.js hash: ${actual}" >&2

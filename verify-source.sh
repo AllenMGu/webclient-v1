@@ -5,7 +5,7 @@ source_repository=https://github.com/JelleBuning/rustdesk.git
 source_commit=47a7b7313bb906ebdae36bd16838bdefa8853639
 expected_archive=f943ce011eb2f8dc3056326cfb265e4bcf3721daea5512e4b57181ffd46f3950
 expected_license=8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef
-expected_main=2112e6feed7220924ad1022b73d175d4d2c608cf9e07038bf4973e6a4c05838e
+expected_main=fef91c15fa4b29d527878aea9f0a923b8b53a6aaaee4d99c61c926caddc74253
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH= cd -- "${script_dir}/.." && pwd)
