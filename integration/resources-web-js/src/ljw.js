@@ -83,6 +83,15 @@ export function getServerConf(token){
                     if (!serverPeerIds.has(k) && oldPeers[k].address_book) {
                         oldPeers[k].address_book = false
                         oldPeers[k].address_books = []
+                        oldPeers[k].address_book_details = {}
+                        if (oldPeers[k].address_book_password) {
+                            delete oldPeers[k].password
+                            delete oldPeers[k].address_book_password
+                            oldPeers[k].remember = false
+                        }
+                        if (oldPeers[k].info) {
+                            delete oldPeers[k].info.hash
+                        }
                         if (!oldPeers[k].managed && !oldPeers[k].last_connected) {
                             delete oldPeers[k]
                         }
@@ -106,6 +115,11 @@ export function getServerConf(token){
                         oldPeers[k].address_books = Array.isArray(res.data.peers[k].address_books) ? res.data.peers[k].address_books : []
                         oldPeers[k].address_book_details = res.data.peers[k].address_book_details || {}
                         oldPeers[k].managed = Boolean(res.data.peers[k].managed)
+                        if (!oldPeers[k].address_book && oldPeers[k].address_book_password) {
+                            delete oldPeers[k].password
+                            delete oldPeers[k].address_book_password
+                            oldPeers[k].remember = false
+                        }
                         const after = JSON.stringify({
                             info: oldPeers[k].info,
                             address_book: oldPeers[k].address_book,
