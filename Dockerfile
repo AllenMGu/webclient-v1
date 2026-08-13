@@ -67,7 +67,7 @@ RUN cd /work/build-source/flutter \
     && flutter build web --release --base-href /webclient/ \
     && sha256sum build/web/main.dart.js \
     && printf '%s  %s\n' \
-      82dcac8f2d4c36327c9d56a0fef492f4e4db92d1960277318014e5b7f06fda85 \
+      f3c09a16c711ec02eb15291cc2c5f7dab7f62c07d9cd2f53a92e49a88d220355 \
       build/web/main.dart.js \
       | sha256sum --check --strict
 

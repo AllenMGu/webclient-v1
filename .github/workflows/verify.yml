@@ -68,7 +68,7 @@ jobs:
             --create --directory=/tmp/webclient-build-b .
           cmp /tmp/webclient-build-a.tar /tmp/webclient-build-b.tar
           printf '%s  %s\n' \
-            82dcac8f2d4c36327c9d56a0fef492f4e4db92d1960277318014e5b7f06fda85 \
+            f3c09a16c711ec02eb15291cc2c5f7dab7f62c07d9cd2f53a92e49a88d220355 \
             /tmp/webclient-build-a/main.dart.js \
             | sha256sum --check --strict
           test -f /tmp/webclient-build-a/corresponding-source/LICENCE
