@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../common.dart';
@@ -87,6 +88,10 @@ class _WebSettingsPageState extends State<WebSettingsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(translate('Server settings saved'))),
     );
+    Future.delayed(
+      const Duration(milliseconds: 500),
+      () => FFI.setByName('reload', ''),
+    );
   }
 
   @override
@@ -100,6 +105,7 @@ class _WebSettingsPageState extends State<WebSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    Provider.of<FfiModel>(context);
     return Scaffold(
       backgroundColor: WebClientTheme.background,
       appBar: AppBar(
