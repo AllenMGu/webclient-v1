@@ -68,7 +68,7 @@ AGPL 文本、NOTICE 及对应缓存清单，当时没有替换 Dart 主程序�
 独立构建所得 `main.dart.js` SHA-256 均为：
 
 ```text
-d92ca6461822b1d0013c4af9024e994f56914e2b8303b6555a5f9041138e971c
+82dcac8f2d4c36327c9d56a0fef492f4e4db92d1960277318014e5b7f06fda85
 ```
 
 上游提交的规范 `git archive`（无路径前缀）SHA-256 为：
