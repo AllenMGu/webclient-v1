@@ -66,9 +66,20 @@ jobs:
             --file=/tmp/webclient-build-b.tar \
             --create --directory=/tmp/webclient-build-b .
           cmp /tmp/webclient-build-a.tar /tmp/webclient-build-b.tar
-          sha256sum /tmp/webclient-build-a/main.dart.js
+          printf '%s  %s\n' \
+            d92ca6461822b1d0013c4af9024e994f56914e2b8303b6555a5f9041138e971c \
+            /tmp/webclient-build-a/main.dart.js \
+            | sha256sum --check --strict
           test -f /tmp/webclient-build-a/corresponding-source/LICENCE
           tar -tf /tmp/webclient-build-a/corresponding-source/rustdesk-source-47a7b7313bb906ebdae36bd16838bdefa8853639.tar \
             | grep -qxF flutter/lib/main.dart
           test -f /tmp/webclient-build-a/corresponding-source/integration/resources-web-js/src/ljw.js
           test -f /tmp/webclient-build-a/corresponding-source/overrides/flutter/lib/webclient_theme.dart
+
+      - name: Upload verified Web Client
+        uses: actions/upload-artifact@v4
+        with:
+          name: webclient-v1-${{ github.sha }}
+          path: /tmp/webclient-build-a
+          if-no-files-found: error
+          retention-days: 7

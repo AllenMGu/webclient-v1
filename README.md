@@ -79,6 +79,12 @@ docker build --platform linux/amd64 \
 
 原始 V1 基线的 `main.dart.js` 哈希与 2023 年参考镜像逐字节一致，来源取证见
 `PROVENANCE.md`。当前产物包含公开的界面修改，因此主程序哈希会与原始基线不同。
+更新后从完整源码生成的 `main.dart.js` SHA-256 固定为：
+
+```text
+d92ca6461822b1d0013c4af9024e994f56914e2b8303b6555a5f9041138e971c
+```
+
 构建基础镜像、Flutter/Engine 提交、依赖锁文件和 `SOURCE_DATE_EPOCH` 均已固定；
 构建后处理还会把 Flutter 随机生成的 Service Worker 版本改为内容哈希。CI 会执行
 两次独立构建并逐字节比较完整输出树，以验证修改后的产物仍然可复现。

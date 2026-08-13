@@ -5,6 +5,7 @@ source_repository=https://github.com/JelleBuning/rustdesk.git
 source_commit=47a7b7313bb906ebdae36bd16838bdefa8853639
 expected_archive=f943ce011eb2f8dc3056326cfb265e4bcf3721daea5512e4b57181ffd46f3950
 expected_license=8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef
+expected_main=d92ca6461822b1d0013c4af9024e994f56914e2b8303b6555a5f9041138e971c
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH= cd -- "${script_dir}/.." && pwd)
@@ -61,6 +62,10 @@ if [ -d "${repository_root}/resources/web/js" ]; then
   cmp "${repository_root}/resources/web/SOURCE.html" "${script_dir}/SOURCE.html"
   cmp "${repository_root}/resources/web/NOTICE" "${script_dir}/NOTICE"
   cmp "${repository_root}/resources/web/AGPL-3.0.txt" "${script_dir}/LICENCE"
+  printf '%s  %s\n' \
+    "${expected_main}" \
+    "${repository_root}/resources/web/main.dart.js" \
+    | sha256sum --check --strict
 fi
 
 echo "Verified complete source at ${source_commit}"
