@@ -3,6 +3,7 @@ import 'package:flutter_hbb/pages/file_manager_page.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
+import 'dart:convert';
 import '../common.dart';
 import '../models/model.dart';
 import '../webclient_theme.dart';
@@ -10,6 +11,67 @@ import 'home_page.dart';
 import 'remote_page.dart';
 import 'settings_page.dart';
 import 'scan_page.dart';
+
+enum _PeerSection { recent, favorites, addressBook, devices }
+
+class _WebPeer {
+  final String id;
+  final String username;
+  final String hostname;
+  final String platform;
+  final String alias;
+  final List<String> tags;
+  final bool online;
+  final int lastOnlineTime;
+  final int lastConnected;
+  final bool favorite;
+  final bool addressBook;
+  final bool managed;
+
+  _WebPeer.fromJson(Map<String, dynamic> json)
+    : id = json['id'] ?? '',
+      username = json['username'] ?? '',
+      hostname = json['hostname'] ?? '',
+      platform = json['platform'] ?? '',
+      alias = json['alias'] ?? '',
+      tags = (json['tags'] as List<dynamic>? ?? [])
+          .map((tag) => tag.toString())
+          .toList(),
+      online = json['online'] == true,
+      lastOnlineTime = (json['last_online_time'] as num? ?? 0).toInt(),
+      lastConnected = (json['last_connected'] as num? ?? 0).toInt(),
+      favorite = json['favorite'] == true,
+      addressBook = json['address_book'] == true,
+      managed = json['managed'] == true;
+
+  String get title => alias.isNotEmpty
+      ? alias
+      : hostname.isNotEmpty
+      ? hostname
+      : id;
+
+  String get subtitle {
+    final identity = username.isNotEmpty && hostname.isNotEmpty
+        ? '$username@$hostname'
+        : hostname.isNotEmpty
+        ? hostname
+        : username;
+    return identity.isEmpty || identity == title ? id : '$id · $identity';
+  }
+
+  bool matches(String query) {
+    final needle = query.trim().toLowerCase();
+    if (needle.isEmpty) return true;
+    return [
+      id,
+      username,
+      hostname,
+      platform,
+      alias,
+      ...tags,
+    ].join(' ').toLowerCase().contains(needle);
+  }
+}
 
 class ConnectionPage extends StatefulWidget implements PageShape {
   ConnectionPage({Key? key}) : super(key: key);
@@ -29,12 +91,20 @@ class ConnectionPage extends StatefulWidget implements PageShape {
 
 class _ConnectionPageState extends State<ConnectionPage> {
   final _idController = TextEditingController();
+  final _peerSearchController = TextEditingController();
+  final Set<String> _selectedPeers = <String>{};
+  _PeerSection _peerSection = _PeerSection.recent;
+  bool _searchVisible = false;
+  bool _selectionMode = false;
+  bool _gridView = true;
   var _updateUrl = '';
-  var _menuPos;
 
   @override
   void initState() {
     super.initState();
+    if (!isAndroid) {
+      _gridView = FFI.getByName('option', 'webclient-peer-view') != 'list';
+    }
     if (isAndroid) {
       Timer(Duration(seconds: 5), () {
         _updateUrl = FFI.getByName('software_update_url');
@@ -50,57 +120,56 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
     if (isAndroid) {
       return SingleChildScrollView(
-        child: Column(
-          children: [getUpdateUI(), getSearchBarUI(), getPeers()],
-        ),
+        child: Column(children: [getUpdateUI(), getSearchBarUI(), getPeers()]),
       );
     }
 
-    return LayoutBuilder(builder: (context, constraints) {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 38, 24, 48),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 1120),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                getUpdateUI(),
-                Text(
-                  translate('Remote Desktop'),
-                  style: Theme.of(context).textTheme.headline5,
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  translate('Connect to another device using its RustDesk ID.'),
-                  style: const TextStyle(
-                    color: WebClientTheme.muted,
-                    fontSize: 14,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 38, 24, 48),
+          child: Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 1120),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  getUpdateUI(),
+                  Text(
+                    translate('Remote Desktop'),
+                    style: Theme.of(context).textTheme.headline5,
                   ),
-                ),
-                const SizedBox(height: 22),
-                getSearchBarUI(),
-                const SizedBox(height: 34),
-                Row(
-                  children: [
-                    Text(
-                      translate('Recent Sessions'),
-                      style: Theme.of(context).textTheme.subtitle1,
+                  const SizedBox(height: 7),
+                  Text(
+                    translate(
+                      'Connect to another device using its RustDesk ID.',
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                        child:
-                            Container(height: 1, color: WebClientTheme.border)),
+                    style: const TextStyle(
+                      color: WebClientTheme.muted,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  getSearchBarUI(),
+                  const SizedBox(height: 30),
+                  getPeerNavigation(),
+                  if (_searchVisible) ...[
+                    const SizedBox(height: 12),
+                    getPeerSearch(),
                   ],
-                ),
-                const SizedBox(height: 16),
-                getPeers(),
-              ],
+                  if (_selectionMode && _selectedPeers.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    getSelectionActions(),
+                  ],
+                  const SizedBox(height: 14),
+                  getPeers(),
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 
   void onConnect() {
@@ -230,53 +299,55 @@ class _ConnectionPageState extends State<ConnectionPage> {
               ],
             ),
             const SizedBox(height: 20),
-            LayoutBuilder(builder: (context, constraints) {
-              final compact = constraints.maxWidth < 620;
-              final field = TextField(
-                autocorrect: false,
-                enableSuggestions: false,
-                keyboardType: TextInputType.visiblePassword,
-                style: const TextStyle(
-                  color: WebClientTheme.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.7,
-                ),
-                controller: _idController,
-                onSubmitted: (_) => onConnect(),
-                decoration: InputDecoration(
-                  labelText: translate('Remote ID'),
-                  hintText: '123 456 789',
-                  prefixIcon: const Icon(
-                    Icons.tag_rounded,
-                    size: 20,
-                    color: WebClientTheme.muted,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 620;
+                final field = TextField(
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: TextInputType.visiblePassword,
+                  style: const TextStyle(
+                    color: WebClientTheme.text,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.7,
                   ),
-                ),
-              );
-              final button = SizedBox(
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: onConnect,
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 19),
-                  label: Text(translate('Connect')),
-                ),
-              );
-              if (compact) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [field, const SizedBox(height: 12), button],
+                  controller: _idController,
+                  onSubmitted: (_) => onConnect(),
+                  decoration: InputDecoration(
+                    labelText: translate('Remote ID'),
+                    hintText: '123 456 789',
+                    prefixIcon: const Icon(
+                      Icons.tag_rounded,
+                      size: 20,
+                      color: WebClientTheme.muted,
+                    ),
+                  ),
                 );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: field),
-                  const SizedBox(width: 12),
-                  button,
-                ],
-              );
-            }),
+                final button = SizedBox(
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: onConnect,
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 19),
+                    label: Text(translate('Connect')),
+                  ),
+                );
+                if (compact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [field, const SizedBox(height: 12), button],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: field),
+                    const SizedBox(width: 12),
+                    button,
+                  ],
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -286,6 +357,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   void dispose() {
     _idController.dispose();
+    _peerSearchController.dispose();
     super.dispose();
   }
 
@@ -293,166 +365,593 @@ class _ConnectionPageState extends State<ConnectionPage> {
     platform = platform.toLowerCase();
     if (platform == 'mac os')
       platform = 'mac';
-    else if (platform != 'linux' && platform != 'android') platform = 'win';
+    else if (platform != 'linux' && platform != 'android')
+      platform = 'win';
     return Image.asset('assets/$platform.png', width: 24, height: 24);
   }
 
-  Widget getPeers() {
-    var peers = FFI.peers();
-    if (peers.isEmpty && !isAndroid) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 24),
-        decoration: BoxDecoration(
-          color: WebClientTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: WebClientTheme.border),
-        ),
-        child: Column(
-          children: [
-            const Icon(
-              Icons.devices_other_outlined,
-              color: WebClientTheme.muted,
-              size: 29,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              translate('No recent sessions'),
-              style: const TextStyle(
-                color: WebClientTheme.text,
-                fontWeight: FontWeight.w600,
+  Widget getPeerNavigation() {
+    final tabs = <Widget>[
+      _sectionButton(_PeerSection.recent, Icons.history_rounded, 'Recent'),
+      _sectionButton(_PeerSection.favorites, Icons.star_rounded, 'Favorites'),
+      _sectionButton(
+        _PeerSection.addressBook,
+        Icons.contacts_outlined,
+        'Address Book',
+      ),
+      _sectionButton(
+        _PeerSection.devices,
+        Icons.devices_other_outlined,
+        'Devices',
+      ),
+    ];
+    final tools = <Widget>[
+      _toolButton(
+        _searchVisible ? Icons.search_off_rounded : Icons.search_rounded,
+        'Search',
+        () => setState(() {
+          _searchVisible = !_searchVisible;
+          if (!_searchVisible) _peerSearchController.clear();
+        }),
+        active: _searchVisible,
+      ),
+      _toolButton(
+        _selectionMode
+            ? Icons.check_box_rounded
+            : Icons.check_box_outline_blank_rounded,
+        'Select',
+        () => setState(() {
+          _selectionMode = !_selectionMode;
+          if (!_selectionMode) _selectedPeers.clear();
+        }),
+        active: _selectionMode,
+      ),
+      _toolButton(
+        _gridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
+        _gridView ? 'List view' : 'Grid view',
+        () {
+          setState(() => _gridView = !_gridView);
+          FFI.setByName(
+            'option',
+            json.encode({
+              'name': 'webclient-peer-view',
+              'value': _gridView ? 'grid' : 'list',
+            }),
+          );
+        },
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 650) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: tabs),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              translate('Devices you connect to will appear here.'),
-              style: const TextStyle(color: WebClientTheme.muted, fontSize: 12),
-            ),
-          ],
-        ),
-      );
-    }
+              const SizedBox(height: 8),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: tools),
+            ],
+          );
+        }
+        return Row(children: [...tabs, const Spacer(), ...tools]);
+      },
+    );
+  }
 
-    return LayoutBuilder(builder: (context, constraints) {
-      const space = 12.0;
-      final columns = constraints.maxWidth >= 980
-          ? 3
-          : constraints.maxWidth >= 640
-              ? 2
-              : 1;
-      final width = (constraints.maxWidth - space * (columns - 1)) / columns;
-      final cards = <Widget>[];
-      peers.forEach((p) {
-        cards.add(SizedBox(
-          width: width,
-          child: Card(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: !isDesktop ? () => connect('${p.id}') : null,
-              onDoubleTap: isDesktop ? () => connect('${p.id}') : null,
-              onLongPress: () {
-                final box = context.findRenderObject() as RenderBox;
-                final point = box.localToGlobal(Offset(width / 2, 80));
-                _menuPos = RelativeRect.fromLTRB(
-                    point.dx, point.dy, point.dx, point.dy);
-                showPeerMenu(context, p.id);
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 15, 8, 15),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: str2color('${p.id}${p.platform}', 0x24),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: getPlatformImage('${p.platform}'),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${p.id}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: WebClientTheme.text,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${p.username}@${p.hostname}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: WebClientTheme.muted,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: translate('More'),
-                      icon: const Icon(
-                        Icons.more_vert,
-                        color: WebClientTheme.muted,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        final box = context.findRenderObject() as RenderBox;
-                        final point = box.localToGlobal(Offset(width - 12, 58));
-                        _menuPos = RelativeRect.fromLTRB(
-                            point.dx, point.dy, point.dx, point.dy);
-                        showPeerMenu(context, p.id);
-                      },
-                    ),
-                  ],
-                ),
+  Widget _sectionButton(_PeerSection section, IconData icon, String label) {
+    final selected = _peerSection == section;
+    return Tooltip(
+      message: translate(label),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => setState(() {
+          _peerSection = section;
+          _selectedPeers.clear();
+        }),
+        child: Container(
+          margin: const EdgeInsets.only(right: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected
+                ? WebClientTheme.accent.withOpacity(0.09)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? WebClientTheme.accent : Colors.transparent,
+                width: 2,
               ),
             ),
           ),
-        ));
-      });
-      return Wrap(spacing: space, runSpacing: space, children: cards);
-    });
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 19,
+                color: selected ? WebClientTheme.accent : WebClientTheme.muted,
+              ),
+              const SizedBox(width: 7),
+              Text(
+                translate(label),
+                style: TextStyle(
+                  color: selected
+                      ? WebClientTheme.accent
+                      : WebClientTheme.muted,
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  void showPeerMenu(BuildContext context, String id) async {
-    var value = await showMenu(
-      context: context,
-      position: this._menuPos,
-      items: [
-            PopupMenuItem<String>(
-              child: Text(translate('Remove')),
-              value: 'remove',
-            )
-          ] +
-          (!isAndroid
-              ? []
-              : [
-                  PopupMenuItem<String>(
-                    child: Text(translate('Transfer File')),
-                    value: 'file',
-                  )
-                ]),
-      elevation: 8,
+  Widget _toolButton(
+    IconData icon,
+    String label,
+    VoidCallback onPressed, {
+    bool active = false,
+  }) {
+    return IconButton(
+      tooltip: translate(label),
+      splashRadius: 20,
+      onPressed: onPressed,
+      icon: Icon(
+        icon,
+        size: 20,
+        color: active ? WebClientTheme.accent : WebClientTheme.muted,
+      ),
     );
-    if (value == 'remove') {
-      setState(() => FFI.setByName('remove', '$id'));
-      () async {
-        removePreference(id);
-      }();
-    } else if (value == 'file') {
-      connect(id, isFileTransfer: true);
+  }
+
+  Widget getPeerSearch() {
+    return SizedBox(
+      height: 44,
+      child: TextField(
+        controller: _peerSearchController,
+        autofocus: true,
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(
+          hintText: translate('Search ID, alias, device, user or tag'),
+          prefixIcon: const Icon(Icons.search_rounded, size: 19),
+          suffixIcon: _peerSearchController.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: translate('Clear'),
+                  onPressed: () => setState(_peerSearchController.clear),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget getSelectionActions() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: WebClientTheme.surface,
+        border: Border.all(color: WebClientTheme.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Text(
+            '${_selectedPeers.length} ${translate('selected')}',
+            style: const TextStyle(
+              color: WebClientTheme.text,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          TextButton.icon(
+            onPressed: () => _setSelectedFavorites(true),
+            icon: const Icon(Icons.star_outline_rounded, size: 18),
+            label: Text(translate('Favorite')),
+          ),
+          if (_peerSection == _PeerSection.favorites)
+            TextButton.icon(
+              onPressed: () => _setSelectedFavorites(false),
+              icon: const Icon(Icons.star_border_rounded, size: 18),
+              label: Text(translate('Unfavorite')),
+            ),
+          if (_peerSection == _PeerSection.recent)
+            TextButton.icon(
+              onPressed: _clearSelectedRecent,
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: Text(translate('Remove from recent')),
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<_WebPeer> _peerCatalog() {
+    if (isAndroid) {
+      return FFI
+          .peers()
+          .map(
+            (peer) => _WebPeer.fromJson({
+              'id': peer.id,
+              'username': peer.username,
+              'hostname': peer.hostname,
+              'platform': peer.platform,
+              'last_connected': 1,
+            }),
+          )
+          .toList();
     }
+    try {
+      final value = FFI.getByName('peer_catalog');
+      if (value.isEmpty) return [];
+      return (json.decode(value) as List<dynamic>)
+          .map((peer) => _WebPeer.fromJson(peer as Map<String, dynamic>))
+          .where((peer) => peer.id.isNotEmpty)
+          .toList();
+    } catch (error) {
+      debugPrint('peer_catalog: $error');
+      return [];
+    }
+  }
+
+  List<_WebPeer> _visiblePeers() {
+    final query = _peerSearchController.text;
+    return _peerCatalog().where((peer) {
+      final inSection = _peerSection == _PeerSection.recent
+          ? peer.lastConnected > 0
+          : _peerSection == _PeerSection.favorites
+          ? peer.favorite
+          : _peerSection == _PeerSection.addressBook
+          ? peer.addressBook
+          : peer.managed;
+      return inSection && peer.matches(query);
+    }).toList();
+  }
+
+  Widget getPeers() {
+    final peers = _visiblePeers();
+    if (peers.isEmpty && !isAndroid) return _emptyPeerState();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!_gridView) {
+          return Column(
+            children: peers
+                .map(
+                  (peer) => Padding(
+                    padding: const EdgeInsets.only(bottom: 9),
+                    child: _peerCard(peer, constraints.maxWidth, true),
+                  ),
+                )
+                .toList(),
+          );
+        }
+        const space = 12.0;
+        final columns = constraints.maxWidth >= 980
+            ? 3
+            : constraints.maxWidth >= 640
+            ? 2
+            : 1;
+        final width = (constraints.maxWidth - space * (columns - 1)) / columns;
+        return Wrap(
+          spacing: space,
+          runSpacing: space,
+          children: peers.map((peer) => _peerCard(peer, width, false)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _emptyPeerState() {
+    final data = _peerSection == _PeerSection.recent
+        ? ['No recent sessions', 'Devices you connect to will appear here.']
+        : _peerSection == _PeerSection.favorites
+        ? ['No favorites', 'Use the star action to keep devices here.']
+        : _peerSection == _PeerSection.addressBook
+        ? [
+            'Address book is empty',
+            'Sign in to sync devices from the API address book.',
+          ]
+        : [
+            'No registered devices',
+            'Devices signed in to this account will appear here.',
+          ];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 24),
+      decoration: BoxDecoration(
+        color: WebClientTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: WebClientTheme.border),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.devices_other_outlined,
+            color: WebClientTheme.muted,
+            size: 29,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            translate(data[0]),
+            style: const TextStyle(
+              color: WebClientTheme.text,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            translate(data[1]),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: WebClientTheme.muted, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _peerCard(_WebPeer peer, double width, bool listMode) {
+    final selected = _selectedPeers.contains(peer.id);
+    return SizedBox(
+      width: width,
+      child: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: selected ? WebClientTheme.accent : WebClientTheme.border,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            if (_selectionMode) {
+              setState(() {
+                selected
+                    ? _selectedPeers.remove(peer.id)
+                    : _selectedPeers.add(peer.id);
+              });
+            } else {
+              connect(peer.id);
+            }
+          },
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              listMode ? 11 : 15,
+              6,
+              listMode ? 11 : 15,
+            ),
+            child: Row(
+              children: [
+                if (_selectionMode) ...[
+                  Checkbox(
+                    value: selected,
+                    onChanged: (_) => setState(() {
+                      selected
+                          ? _selectedPeers.remove(peer.id)
+                          : _selectedPeers.add(peer.id);
+                    }),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: str2color('${peer.id}${peer.platform}', 0x24),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: getPlatformImage(peer.platform),
+                    ),
+                    if (peer.managed)
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          width: 11,
+                          height: 11,
+                          decoration: BoxDecoration(
+                            color: peer.online
+                                ? const Color(0xFF24A148)
+                                : WebClientTheme.muted,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: WebClientTheme.surface,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              peer.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: WebClientTheme.text,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (peer.favorite) ...[
+                            const SizedBox(width: 5),
+                            const Icon(
+                              Icons.star_rounded,
+                              size: 16,
+                              color: Color(0xFFF5A623),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        peer.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: WebClientTheme.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (peer.tags.isNotEmpty || peer.managed) ...[
+                        const SizedBox(height: 7),
+                        Wrap(
+                          spacing: 5,
+                          runSpacing: 4,
+                          children: [
+                            if (peer.managed)
+                              _peerBadge(
+                                peer.online ? 'Online' : _lastSeen(peer),
+                                peer.online
+                                    ? const Color(0xFFE7F6EA)
+                                    : WebClientTheme.background,
+                                peer.online
+                                    ? const Color(0xFF147D32)
+                                    : WebClientTheme.muted,
+                              ),
+                            ...peer.tags
+                                .take(2)
+                                .map(
+                                  (tag) => _peerBadge(
+                                    tag,
+                                    WebClientTheme.background,
+                                    WebClientTheme.muted,
+                                  ),
+                                ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (!_selectionMode) _peerMenu(peer),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _peerBadge(String label, Color background, Color foreground) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        translate(label),
+        style: TextStyle(color: foreground, fontSize: 10),
+      ),
+    );
+  }
+
+  String _lastSeen(_WebPeer peer) {
+    if (peer.lastOnlineTime <= 0) return 'Offline';
+    final seconds =
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 - peer.lastOnlineTime;
+    if (seconds < 120) return 'Online';
+    if (seconds < 3600) return '${seconds ~/ 60}m ago';
+    if (seconds < 86400) return '${seconds ~/ 3600}h ago';
+    return '${seconds ~/ 86400}d ago';
+  }
+
+  Widget _peerMenu(_WebPeer peer) {
+    return PopupMenuButton<String>(
+      tooltip: translate('More'),
+      icon: const Icon(Icons.more_vert, color: WebClientTheme.muted, size: 20),
+      onSelected: (value) {
+        if (value == 'connect') connect(peer.id);
+        if (value == 'favorite') _setFavorite(peer.id, !peer.favorite);
+        if (value == 'remove_recent') _clearRecent([peer.id]);
+        if (value == 'file') connect(peer.id, isFileTransfer: true);
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<String>(
+          value: 'connect',
+          child: _menuAction(Icons.desktop_windows_outlined, 'Connect'),
+        ),
+        PopupMenuItem<String>(
+          value: 'favorite',
+          child: _menuAction(
+            peer.favorite ? Icons.star_rounded : Icons.star_outline_rounded,
+            peer.favorite ? 'Unfavorite' : 'Favorite',
+          ),
+        ),
+        if (peer.lastConnected > 0)
+          PopupMenuItem<String>(
+            value: 'remove_recent',
+            child: _menuAction(
+              Icons.delete_outline_rounded,
+              'Remove from recent',
+            ),
+          ),
+        if (isAndroid)
+          PopupMenuItem<String>(
+            value: 'file',
+            child: _menuAction(Icons.file_present_outlined, 'Transfer File'),
+          ),
+      ],
+    );
+  }
+
+  Widget _menuAction(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: WebClientTheme.muted),
+        const SizedBox(width: 11),
+        Text(translate(label)),
+      ],
+    );
+  }
+
+  void _setFavorite(String id, bool favorite) {
+    FFI.setByName(
+      'peer_favorite',
+      json.encode({'id': id, 'favorite': favorite}),
+    );
+    setState(() {});
+  }
+
+  void _setSelectedFavorites(bool favorite) {
+    for (final id in _selectedPeers) {
+      FFI.setByName(
+        'peer_favorite',
+        json.encode({'id': id, 'favorite': favorite}),
+      );
+    }
+    setState(_selectedPeers.clear);
+  }
+
+  void _clearSelectedRecent() => _clearRecent(_selectedPeers.toList());
+
+  void _clearRecent(List<String> ids) {
+    FFI.setByName('clear_recent', json.encode(ids));
+    for (final id in ids) {
+      removePreference(id);
+    }
+    setState(_selectedPeers.clear);
   }
 }
 
@@ -490,14 +989,14 @@ class _WebMenuState extends State<WebMenu> {
                     PopupMenuItem<String>(
                       child: _menuItem(Icons.qr_code_scanner, 'Scan'),
                       value: 'scan',
-                    )
+                    ),
                   ]
                 : <PopupMenuItem<String>>[]) +
             [
               PopupMenuItem<String>(
                 child: _menuItem(Icons.dns_outlined, 'ID/Relay Server'),
                 value: 'server',
-              )
+              ),
             ] +
             (getUrl().contains('admin.rustdesk.com')
                 ? <PopupMenuItem<String>>[]
@@ -508,13 +1007,13 @@ class _WebMenuState extends State<WebMenu> {
                         username == null ? 'Login' : 'Logout ($username)',
                       ),
                       value: 'login',
-                    )
+                    ),
                   ]) +
             [
               PopupMenuItem<String>(
                 child: _menuItem(Icons.info_outline, 'About RustDesk'),
                 value: 'about',
-              )
+              ),
             ];
       },
       onSelected: (value) {
@@ -530,9 +1029,7 @@ class _WebMenuState extends State<WebMenu> {
         if (value == 'scan') {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (BuildContext context) => ScanPage(),
-            ),
+            MaterialPageRoute(builder: (BuildContext context) => ScanPage()),
           );
         }
       },
