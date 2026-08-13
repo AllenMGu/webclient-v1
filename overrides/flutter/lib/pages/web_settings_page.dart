@@ -312,8 +312,12 @@ class _WebSettingsPageState extends State<WebSettingsPage> {
           [
             for (final value in ['best', 'balanced', 'low'])
               _radio(_qualityLabel(value), value, _imageQuality, (next) {
-                setState(() => _imageQuality = next);
+                setState(() {
+                  _imageQuality = next;
+                  _adaptiveBitrate = false;
+                });
                 _saveOption('webclient-default-image-quality', next);
+                _saveOption('webclient-adaptive-bitrate', false);
               }),
           ],
         ),

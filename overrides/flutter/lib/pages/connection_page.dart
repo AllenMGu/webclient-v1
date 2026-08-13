@@ -16,6 +16,7 @@ import 'web_settings_page.dart';
 enum _PeerSection { recent, favorites, addressBook, devices }
 
 class _WebPeer {
+  final Map<String, dynamic> raw;
   final String id;
   final String username;
   final String hostname;
@@ -31,7 +32,8 @@ class _WebPeer {
   final bool managed;
 
   _WebPeer.fromJson(Map<String, dynamic> json)
-    : id = json['id'] ?? '',
+    : raw = Map<String, dynamic>.from(json),
+      id = json['id'] ?? '',
       username = json['username'] ?? '',
       hostname = json['hostname'] ?? '',
       platform = json['platform'] ?? '',
@@ -48,6 +50,22 @@ class _WebPeer {
           .map((book) => book.toString())
           .toList(),
       managed = json['managed'] == true;
+
+  _WebPeer forAddressBook(String guid) {
+    final allDetails = raw['address_book_details'];
+    if (allDetails is! Map) return this;
+    final detail = allDetails[guid];
+    if (detail is! Map) return this;
+    return _WebPeer.fromJson({
+      ...raw,
+      'username': detail['username'] ?? username,
+      'hostname': detail['hostname'] ?? hostname,
+      'platform': detail['platform'] ?? platform,
+      'alias': detail['alias'] ?? alias,
+      'tags': detail['tags'] ?? <dynamic>[],
+      'hash': detail['hash'] ?? '',
+    });
+  }
 
   String get title => alias.isNotEmpty
       ? alias
@@ -655,7 +673,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
     final query = _peerSearchController.text;
     final books = _addressBookCatalog();
     final selectedBook = _effectiveAddressBook(books);
-    return _peerCatalog().where((peer) {
+    return _peerCatalog().map((peer) {
+      if (_peerSection == _PeerSection.addressBook && selectedBook != null) {
+        return peer.forAddressBook(selectedBook);
+      }
+      return peer;
+    }).where((peer) {
       final inSection = _peerSection == _PeerSection.recent
           ? peer.lastConnected > 0
           : _peerSection == _PeerSection.favorites
@@ -902,7 +925,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     : _selectedPeers.add(peer.id);
               });
             } else {
-              connect(peer.id);
+              _connectPeer(peer);
             }
           },
           child: Padding(
@@ -1067,7 +1090,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       tooltip: translate('More'),
       icon: Icon(Icons.more_vert, color: WebClientTheme.muted, size: 20),
       onSelected: (value) {
-        if (value == 'connect') connect(peer.id);
+        if (value == 'connect') _connectPeer(peer);
         if (value == 'favorite') _setFavorite(peer.id, !peer.favorite);
         if (value == 'remove_recent') _clearRecent([peer.id]);
         if (value == 'file') connect(peer.id, isFileTransfer: true);
@@ -1099,6 +1122,20 @@ class _ConnectionPageState extends State<ConnectionPage> {
           ),
       ],
     );
+  }
+
+  void _connectPeer(_WebPeer peer) {
+    if (_peerSection == _PeerSection.addressBook) {
+      final books = _addressBookCatalog();
+      final selectedBook = _effectiveAddressBook(books);
+      if (selectedBook != null) {
+        FFI.setByName(
+          'address_book_activate',
+          json.encode({'id': peer.id, 'guid': selectedBook}),
+        );
+      }
+    }
+    connect(peer.id);
   }
 
   Widget _menuAction(IconData icon, String label) {
