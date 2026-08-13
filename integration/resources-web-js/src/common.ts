@@ -68,6 +68,8 @@ export async function sleep(ms: number) {
 
 function getLang(): string {
   try {
+    const preferred = localStorage.getItem("webclient-language") || "";
+    if (preferred) return preferred;
     const queryString = window.location.search;
     const urlParams = new URLSearchParams(queryString);
     return urlParams.get("lang") || "";

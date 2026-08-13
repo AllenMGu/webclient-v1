@@ -27,6 +27,13 @@ Future<Null> main() async {
   );
   await a;
   await b;
+  final selectedTheme = FFI.getByName('option', 'webclient-theme');
+  final brightness = selectedTheme == 'dark'
+      ? Brightness.dark
+      : selectedTheme == 'light'
+      ? Brightness.light
+      : WidgetsBinding.instance!.window.platformBrightness;
+  WebClientTheme.configure(brightness);
   refreshCurrentUser();
   toAndroidChannelInit();
   runApp(App());
@@ -52,7 +59,7 @@ class App extends StatelessWidget {
                   primarySwatch: Colors.blue,
                   visualDensity: VisualDensity.adaptivePlatformDensity,
                 )
-              : WebClientTheme.light,
+              : WebClientTheme.current,
           home: !isAndroid ? WebHomePage() : HomePage(),
           navigatorObservers: [
             FirebaseAnalyticsObserver(analytics: analytics),

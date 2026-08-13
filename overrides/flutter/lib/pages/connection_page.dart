@@ -11,6 +11,7 @@ import 'home_page.dart';
 import 'remote_page.dart';
 import 'settings_page.dart';
 import 'scan_page.dart';
+import 'web_settings_page.dart';
 
 enum _PeerSection { recent, favorites, addressBook, devices }
 
@@ -26,6 +27,7 @@ class _WebPeer {
   final int lastConnected;
   final bool favorite;
   final bool addressBook;
+  final List<String> addressBooks;
   final bool managed;
 
   _WebPeer.fromJson(Map<String, dynamic> json)
@@ -42,6 +44,9 @@ class _WebPeer {
       lastConnected = (json['last_connected'] as num? ?? 0).toInt(),
       favorite = json['favorite'] == true,
       addressBook = json['address_book'] == true,
+      addressBooks = (json['address_books'] as List<dynamic>? ?? [])
+          .map((book) => book.toString())
+          .toList(),
       managed = json['managed'] == true;
 
   String get title => alias.isNotEmpty
@@ -73,6 +78,24 @@ class _WebPeer {
   }
 }
 
+class _WebAddressBook {
+  final String guid;
+  final String name;
+  final String owner;
+  final int rule;
+  final List<String> tags;
+
+  _WebAddressBook.fromJson(Map<String, dynamic> json)
+    : guid = json['guid'] ?? '',
+      name = json['name'] ?? '',
+      owner = json['owner'] ?? '',
+      rule = (json['rule'] as num? ?? 0).toInt(),
+      tags = (json['tags'] as List<dynamic>? ?? [])
+          .map((tag) => tag.toString())
+          .where((tag) => tag.isNotEmpty)
+          .toList();
+}
+
 class ConnectionPage extends StatefulWidget implements PageShape {
   ConnectionPage({Key? key}) : super(key: key);
 
@@ -97,6 +120,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
   bool _searchVisible = false;
   bool _selectionMode = false;
   bool _gridView = true;
+  String? _selectedAddressBook;
+  String? _selectedAddressBookTag;
   var _updateUrl = '';
 
   @override
@@ -450,6 +475,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
         onTap: () => setState(() {
           _peerSection = section;
           _selectedPeers.clear();
+          if (section != _PeerSection.addressBook) {
+            _selectedAddressBookTag = null;
+          }
         }),
         child: Container(
           margin: const EdgeInsets.only(right: 4),
@@ -600,15 +628,43 @@ class _ConnectionPageState extends State<ConnectionPage> {
     }
   }
 
+  List<_WebAddressBook> _addressBookCatalog() {
+    if (isAndroid) return [];
+    try {
+      final value = FFI.getByName('address_book_catalog');
+      if (value.isEmpty) return [];
+      return (json.decode(value) as List<dynamic>)
+          .map((book) => _WebAddressBook.fromJson(book as Map<String, dynamic>))
+          .where((book) => book.guid.isNotEmpty)
+          .toList();
+    } catch (error) {
+      debugPrint('address_book_catalog: $error');
+      return [];
+    }
+  }
+
+  String? _effectiveAddressBook(List<_WebAddressBook> books) {
+    if (books.isEmpty) return null;
+    if (books.any((book) => book.guid == _selectedAddressBook)) {
+      return _selectedAddressBook;
+    }
+    return books.first.guid;
+  }
+
   List<_WebPeer> _visiblePeers() {
     final query = _peerSearchController.text;
+    final books = _addressBookCatalog();
+    final selectedBook = _effectiveAddressBook(books);
     return _peerCatalog().where((peer) {
       final inSection = _peerSection == _PeerSection.recent
           ? peer.lastConnected > 0
           : _peerSection == _PeerSection.favorites
           ? peer.favorite
           : _peerSection == _PeerSection.addressBook
-          ? peer.addressBook
+          ? peer.addressBook &&
+                (selectedBook == null || peer.addressBooks.contains(selectedBook)) &&
+                (_selectedAddressBookTag == null ||
+                    peer.tags.contains(_selectedAddressBookTag))
           : peer.managed;
       return inSection && peer.matches(query);
     }).toList();
@@ -616,7 +672,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   Widget getPeers() {
     final peers = _visiblePeers();
+    if (_peerSection == _PeerSection.addressBook && !isAndroid) {
+      return _addressBookView(peers);
+    }
     if (peers.isEmpty && !isAndroid) return _emptyPeerState();
+    return _peerResults(peers);
+  }
+
+  Widget _peerResults(List<_WebPeer> peers) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (!_gridView) {
@@ -644,6 +707,128 @@ class _ConnectionPageState extends State<ConnectionPage> {
           children: peers.map((peer) => _peerCard(peer, width, false)).toList(),
         );
       },
+    );
+  }
+
+  Widget _addressBookView(List<_WebPeer> peers) {
+    final books = _addressBookCatalog();
+    if (books.isEmpty) return _emptyPeerState();
+    final selectedGuid = _effectiveAddressBook(books);
+    final selected = books.firstWhere((book) => book.guid == selectedGuid);
+    final tags = selected.tags.toSet().toList()..sort();
+
+    final selector = Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: WebClientTheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: WebClientTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String>(
+            value: selectedGuid,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: translate('Address Book'),
+              prefixIcon: const Icon(Icons.contacts_outlined, size: 19),
+            ),
+            items: books
+                .map(
+                  (book) => DropdownMenuItem<String>(
+                    value: book.guid,
+                    child: Text(
+                      book.owner == book.name || book.owner.isEmpty
+                          ? book.name
+                          : '${book.name} · ${book.owner}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) => setState(() {
+              _selectedAddressBook = value;
+              _selectedAddressBookTag = null;
+              _selectedPeers.clear();
+            }),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            translate('Tags'),
+            style: const TextStyle(
+              color: WebClientTheme.text,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _addressBookTag('All', null),
+          if (tags.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Text(
+                translate('No tags'),
+                style: const TextStyle(
+                  color: WebClientTheme.muted,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ...tags.map((tag) => _addressBookTag(tag, tag)),
+        ],
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final results = peers.isEmpty ? _emptyPeerState() : _peerResults(peers);
+        if (constraints.maxWidth < 760) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [selector, const SizedBox(height: 12), results],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 220, child: selector),
+            const SizedBox(width: 14),
+            Expanded(child: results),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _addressBookTag(String label, String? tag) {
+    final selected = _selectedAddressBookTag == tag;
+    return InkWell(
+      borderRadius: BorderRadius.circular(7),
+      onTap: () => setState(() {
+        _selectedAddressBookTag = tag;
+        _selectedPeers.clear();
+      }),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? WebClientTheme.accent.withOpacity(0.09)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(
+          translate(label),
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: selected ? WebClientTheme.accent : WebClientTheme.muted,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 
@@ -994,6 +1179,10 @@ class _WebMenuState extends State<WebMenu> {
                 : <PopupMenuItem<String>>[]) +
             [
               PopupMenuItem<String>(
+                child: _menuItem(Icons.settings_outlined, 'Settings'),
+                value: 'settings',
+              ),
+              PopupMenuItem<String>(
                 child: _menuItem(Icons.dns_outlined, 'ID/Relay Server'),
                 value: 'server',
               ),
@@ -1017,6 +1206,12 @@ class _WebMenuState extends State<WebMenu> {
             ];
       },
       onSelected: (value) {
+        if (value == 'settings') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => WebSettingsPage()),
+          );
+        }
         if (value == 'server') showServerSettings();
         if (value == 'about') showAbout();
         if (value == 'login') {
