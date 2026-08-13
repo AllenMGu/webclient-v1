@@ -27,13 +27,8 @@ fi
   --output "type=local,dest=${output_dir}" \
   "${script_dir}"
 
-expected=dc012d2e7a91c43eb753aa982a8a78f1c02dd86ca9bcf9258091dc67bcaccb5f
-actual=$(sha256sum "${output_dir}/main.dart.js" | awk '{print $1}')
-if [ "${actual}" != "${expected}" ]; then
-  echo "Unexpected main.dart.js hash: ${actual}" >&2
-  exit 1
-fi
-
 test -f "${output_dir}/corresponding-source/LICENCE"
 test -f "${output_dir}/corresponding-source/rustdesk-source-47a7b7313bb906ebdae36bd16838bdefa8853639.tar"
+test -f "${output_dir}/corresponding-source/overrides/flutter/lib/webclient_theme.dart"
+sha256sum "${output_dir}/main.dart.js"
 echo "Web Client V1 built at ${output_dir}"

@@ -40,6 +40,7 @@ RUN git init /opt/flutter \
 WORKDIR /work
 COPY rustdesk-source-47a7b7313bb906ebdae36bd16838bdefa8853639.tar /work/upstream-source.tar
 COPY integration/resources-web-js/ /work/integration-js/
+COPY overrides/flutter/ /work/flutter-overrides/
 COPY . /work/disclosure/
 COPY SOURCE.html /work/SOURCE.html
 
@@ -50,11 +51,12 @@ RUN printf '%s  %s\n' \
     && mkdir /work/upstream-source \
     && tar -xf /work/upstream-source.tar -C /work/upstream-source
 
-# Start from the complete fixed upstream tree, overlay this API's modified JS
-# sources, and delete all precompiled JS before rebuilding.
+# Start from the complete fixed upstream tree, overlay the published Web Client
+# integration and UI sources, and delete all precompiled JS before rebuilding.
 RUN cp -a /work/upstream-source /work/build-source \
     && rm -rf /work/build-source/flutter/web/js \
     && cp -a /work/integration-js /work/build-source/flutter/web/js \
+    && cp -a /work/flutter-overrides/. /work/build-source/flutter/ \
     && rm -rf /work/build-source/flutter/web/js/dist /work/build-source/flutter/web/js/node_modules \
     && yarn --cwd /work/build-source/flutter/web/js install --frozen-lockfile --non-interactive \
     && yarn --cwd /work/build-source/flutter/web/js build \
@@ -63,10 +65,7 @@ RUN cp -a /work/upstream-source /work/build-source \
 RUN cd /work/build-source/flutter \
     && flutter pub get \
     && flutter build web --release --base-href /webclient/ \
-    && printf '%s  %s\n' \
-      dc012d2e7a91c43eb753aa982a8a78f1c02dd86ca9bcf9258091dc67bcaccb5f \
-      build/web/main.dart.js \
-      | sha256sum --check --strict
+    && sha256sum build/web/main.dart.js
 
 COPY postprocess.mjs /work/postprocess.mjs
 RUN node /work/postprocess.mjs \

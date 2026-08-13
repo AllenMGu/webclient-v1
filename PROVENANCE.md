@@ -40,8 +40,8 @@ subject:    changed server back to default
    被替换。后续 API 集成只改动并重编译了 `resources/web/js/` 部分；其修改源码
    仍随仓库提供。
 
-本次合规整理只向 `index.html` 和 Service Worker 增加了显著源码入口、
-AGPL 文本、NOTICE 及对应缓存清单，没有替换 Dart 主程序。整理后的关键哈希为：
+初次合规整理只向 `index.html` 和 Service Worker 增加了显著源码入口、
+AGPL 文本、NOTICE 及对应缓存清单，当时没有替换 Dart 主程序。该基线的关键哈希为：
 
 | 文件 | SHA-256 |
 |---|---|
@@ -52,6 +52,19 @@ AGPL 文本、NOTICE 及对应缓存清单，没有替换 Dart 主程序。整�
 
 使用 Node 16.20.2、Yarn 1.22.19 与随附 Linux 锁文件重建
 `integration/resources-web-js/` 后，`index.js` 和 `vendor.js` 均与上表按字节一致。
+
+## 界面更新来源与边界
+
+后续界面更新参考 RustDesk 官方 `1.4.9` 标签对应提交
+`6c578292e8ebbbec708b76986ba8c4bc7c509747` 的 Flutter 主题、间距、卡片和工具栏
+视觉语言。所有实际修改均以完整 Dart 源码保存在 `overrides/flutter/`，并在构建时
+覆盖固定 V1 快照中的同名文件。
+
+该更新只改变 Web 界面与主题，不替换 V1 的连接协议、TypeScript WebSocket 桥接、
+远控会话实现或 API 登录/地址簿集成。RustDesk 1.4.9 的官方 Web 构建仍标记为预览，
+其标签源码也不包含本项目 V1 所依赖的完整 `flutter/web/js` 桥接树，因此没有声称
+当前产物是 1.4.9 核心的 Web 构建。当前产物哈希必须以修改后两次独立源码构建的
+逐字节一致结果为准，而不能继续使用上表的原始 V1 基线哈希。
 
 上游提交的规范 `git archive`（无路径前缀）SHA-256 为：
 
