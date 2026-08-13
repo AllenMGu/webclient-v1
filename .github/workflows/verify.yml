@@ -29,6 +29,8 @@ jobs:
           tar -tf rustdesk-source-47a7b7313bb906ebdae36bd16838bdefa8853639.tar \
             | grep -qxF flutter/pubspec.lock
           test -f integration/resources-web-js/yarn.lock
+          test -f overrides/flutter/lib/webclient_theme.dart
+          test -f overrides/flutter/lib/pages/connection_page.dart
 
   build:
     name: Build twice and compare
@@ -65,10 +67,19 @@ jobs:
             --create --directory=/tmp/webclient-build-b .
           cmp /tmp/webclient-build-a.tar /tmp/webclient-build-b.tar
           printf '%s  %s\n' \
-            dc012d2e7a91c43eb753aa982a8a78f1c02dd86ca9bcf9258091dc67bcaccb5f \
+            d92ca6461822b1d0013c4af9024e994f56914e2b8303b6555a5f9041138e971c \
             /tmp/webclient-build-a/main.dart.js \
             | sha256sum --check --strict
           test -f /tmp/webclient-build-a/corresponding-source/LICENCE
           tar -tf /tmp/webclient-build-a/corresponding-source/rustdesk-source-47a7b7313bb906ebdae36bd16838bdefa8853639.tar \
             | grep -qxF flutter/lib/main.dart
           test -f /tmp/webclient-build-a/corresponding-source/integration/resources-web-js/src/ljw.js
+          test -f /tmp/webclient-build-a/corresponding-source/overrides/flutter/lib/webclient_theme.dart
+
+      - name: Upload verified Web Client
+        uses: actions/upload-artifact@v4
+        with:
+          name: webclient-v1-${{ github.sha }}
+          path: /tmp/webclient-build-a
+          if-no-files-found: error
+          retention-days: 7

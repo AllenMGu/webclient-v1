@@ -5,7 +5,7 @@ source_repository=https://github.com/JelleBuning/rustdesk.git
 source_commit=47a7b7313bb906ebdae36bd16838bdefa8853639
 expected_archive=f943ce011eb2f8dc3056326cfb265e4bcf3721daea5512e4b57181ffd46f3950
 expected_license=8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef
-expected_main=dc012d2e7a91c43eb753aa982a8a78f1c02dd86ca9bcf9258091dc67bcaccb5f
+expected_main=d92ca6461822b1d0013c4af9024e994f56914e2b8303b6555a5f9041138e971c
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH= cd -- "${script_dir}/.." && pwd)
@@ -40,6 +40,20 @@ if [ "${actual_license}" != "${expected_license}" ]; then
 fi
 
 tar -xOf "${bundled_archive}" LICENCE | cmp - "${script_dir}/LICENCE"
+
+for overlay in \
+  flutter/lib/main.dart \
+  flutter/lib/webclient_theme.dart \
+  flutter/lib/pages/home_page.dart \
+  flutter/lib/pages/connection_page.dart
+do
+  test -f "${script_dir}/overrides/${overlay}"
+done
+
+if find "${script_dir}/overrides" -type l -print -quit | grep -q .; then
+  echo "UI source overlays must not contain symbolic links" >&2
+  exit 1
+fi
 
 if [ -d "${repository_root}/resources/web/js" ]; then
   diff --recursive --brief --no-dereference \

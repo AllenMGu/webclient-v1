@@ -30,6 +30,23 @@ WebSocket 适配源码保留在
 保证它与运行时的 `resources/web/js/` 一致；构建时会覆盖到上游快照的对应 JS
 目录后重新编译。
 
+## 1.4.9 风格界面更新
+
+当前版本在不更换 V1 连接协议、WebSocket 桥接和 API 集成的前提下，参考
+RustDesk `1.4.9` 客户端的 Flutter 视觉语言更新了 Web 界面，包括：
+
+- 更紧凑的品牌顶栏和账户/服务器菜单；
+- 现代化远程 ID 连接卡片，支持回车连接和窄屏响应式排列；
+- 响应式最近会话卡片和空状态；
+- 与现行客户端一致的蓝色强调色、灰色工作区、圆角、边框和控件层级。
+
+界面修改的完整 Dart 源码位于
+[`overrides/flutter/`](overrides/flutter/)。Dockerfile 先展开固定的原始 V1
+完整源码，再应用该公开覆盖层并从 Dart 源码编译。因此，上游原始快照保持不变，
+修改内容又能被逐文件审阅、重建和再分发。视觉参考版本固定为
+[`rustdesk/rustdesk@6c578292e8ebbbec708b76986ba8c4bc7c509747`](https://github.com/rustdesk/rustdesk/tree/6c578292e8ebbbec708b76986ba8c4bc7c509747)；
+这不是把 1.4.9 尚未完整支持 Web 的传输核心混入 V1。
+
 更完整的证据链和哈希见 [`PROVENANCE.md`](PROVENANCE.md)。
 
 ## 可复现构建
@@ -60,17 +77,17 @@ docker build --platform linux/amd64 \
 - `SOURCE.html`、AGPL 许可证及版权说明；
 - `corresponding-source/`，即随产物提供的完整对应源码与构建材料。
 
-Dockerfile 会校验重新生成的 Dart 主程序哈希为：
+原始 V1 基线的 `main.dart.js` 哈希与 2023 年参考镜像逐字节一致，来源取证见
+`PROVENANCE.md`。当前产物包含公开的界面修改，因此主程序哈希会与原始基线不同。
+更新后从完整源码生成的 `main.dart.js` SHA-256 固定为：
 
 ```text
-dc012d2e7a91c43eb753aa982a8a78f1c02dd86ca9bcf9258091dc67bcaccb5f
+d92ca6461822b1d0013c4af9024e994f56914e2b8303b6555a5f9041138e971c
 ```
 
-这与仓库现有 V1 产物及 2023 年的参考镜像完全一致。该结论已在 Linux amd64
-环境中从完整源码实际重建并通过逐字节比较，不是只依据版本号推测。构建基础
-镜像、Flutter/Engine 提交、依赖锁文件和 `SOURCE_DATE_EPOCH` 均已固定；构建后
-处理还会把 Flutter 随机生成的 Service Worker 版本改为内容哈希。CI 会执行两次
-独立构建并比较输出树。
+构建基础镜像、Flutter/Engine 提交、依赖锁文件和 `SOURCE_DATE_EPOCH` 均已固定；
+构建后处理还会把 Flutter 随机生成的 Service Worker 版本改为内容哈希。CI 会执行
+两次独立构建并逐字节比较完整输出树，以验证修改后的产物仍然可复现。
 
 ## 在 rustdesk-api 中使用
 
